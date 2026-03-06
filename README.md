@@ -85,3 +85,253 @@ o	Proporciona estadísticas de latencia y, crucialmente, la pérdida de paquetes
 o	Fase de Descubrimiento: Identifica todos los routers en la ruta usando paquetes con TTL incrementales.
 o	Fase de Análisis: Una vez detectada la ruta, envía ráfagas de pings a cada salto durante un periodo determinado (normalmente 250 segundos).
 o	Fase de Informe: Calcula el porcentaje de pérdida en cada router para determinar con precisión en qué punto de la red existe una falla o saturación
+
+b: Comando para “caminar” el árbol MIB del router
+
+Se puede usar el comando:
+
+snmpwalk -v2c -c public 192.168.1.1
+
+Este comando utiliza SNMPv2c, la comunidad public y permite recorrer (walk) el árbol MIB del router para obtener todos los valores de sus interfaces.
+
+2. Evento que provoca el trap authenticationFailure
+
+Este trap ocurre cuando un dispositivo intenta acceder al router con una comunidad SNMP incorrecta o no autorizada.
+
+3. Ventaja de recibir un Trap en lugar de usar polling
+
+La ventaja es que el router envía la alerta automáticamente cuando ocurre el evento, lo que:
+
+Reduce tráfico de red
+
+Permite detectar problemas inmediatamente
+
+Evita consultas constantes del gestor SNMP.
+
+
+<img width="641" height="505" alt="image" src="https://github.com/user-attachments/assets/be28327d-7f9a-478f-892f-7e95a1985aad" />
+<img width="621" height="294" alt="image" src="https://github.com/user-attachments/assets/aa42edc1-1d92-41a2-a9d1-4d019f66fc99" />
+Paso 1: Verificación de conectividad básica y resolución de nombres
+1. Comando para verificar conectividad con GitHub
+Comando:
+ping github.com
+Qué verifica:
+Este comando comprueba si el equipo tiene conectividad IP con el servidor de GitHub.
+Protocolo utilizado:
+Utiliza ICMP (Internet Control Message Protocol).
+Capa del modelo OSI:
+Capa 3 – Red
+Qué ocurre:
+Se envían paquetes ICMP Echo Request al servidor y este responde con Echo Reply si hay conectividad.
+
+2. Cómo obtiene el equipo la dirección IP de github.com
+Cuando escribes github.com, el sistema realiza una resolución DNS para convertir el nombre de dominio en una dirección IP.
+Proceso:
+El equipo consulta al servidor DNS configurado.
+El DNS busca la IP asociada al dominio.
+El servidor responde con la dirección IP de GitHub.
+El equipo ya puede comunicarse con ese servidor.
+Protocolo utilizado:
+DNS (Domain Name System)
+Capa OSI:
+Capa 7 – Aplicación
+Estructuras de datos que viajan:
+Paquetes IP
+Segmentos UDP (generalmente puerto 53)
+Comando para verificar DNS:
+nslookup github.com
+Si falla la resolución DNS se puede usar:
+nslookup github.com
+o revisar el DNS configurado con:
+ipconfig /all
+
+
+3. Latencia alta pero ping exitoso
+Si el ping responde pero con latencia alta y variable, la métrica afectada es:
+Latencia y Jitter
+Impacto en git push:
+El envío de datos será más lento
+Puede haber retransmisiones de paquetes
+El throughput (velocidad efectiva) disminuye
+El git push puede tardar más tiempo o incluso fallar si la red es muy inestable
+
+<img width="964" height="507" alt="image" src="https://github.com/user-attachments/assets/9ea7a446-aac2-4c60-b908-b47844395e55" />
+Paso 2: Establecimiento de la conexión para el push
+1. Protocolo de transporte y establecimiento de conexión
+El protocolo de transporte que se utiliza es TCP (Transmission Control Protocol).
+TCP establece una conexión confiable mediante el proceso llamado Three-Way Handshake:
+SYN:
+El cliente (tu computador) envía un segmento SYN al servidor de GitHub para iniciar la conexión.
+SYN-ACK:
+El servidor responde con SYN-ACK, aceptando la solicitud.
+ACK:
+El cliente responde con ACK, confirmando la conexión.
+Después de este proceso, la conexión queda establecida y Git puede comenzar a enviar los datos del git push usando HTTPS.
+Capa OSI:
+Capa 4 – Transporte
+Estructura de datos:
+Segmentos TCP
+
+2. Herramienta para observar los segmentos TCP
+La herramienta que se puede usar es Wireshark.
+Filtro para ver solo tráfico hacia GitHub:
+ip.addr == IP_DE_GITHUB
+Ejemplo si la IP fuera 140.82.114.4:
+ip.addr == 140.82.114.4
+También se podría usar un filtro más específico para HTTPS:
+tcp.port == 443
+Esto permite observar los segmentos TCP intercambiados durante la conexión.
+
+3. Puertos origen y destino en la cabecera TCP
+Puerto destino típico:
+443 (HTTPS)
+Puerto origen:
+Puerto efímero generado por el sistema operativo
+(generalmente entre 49152 – 65535).
+Ejemplo:
+Campo	Valor
+Puerto origen	52344
+Puerto destino	443
+Capa del modelo OSI que gestiona los puertos:
+Capa 4 – Transporte.
+
+<img width="943" height="487" alt="image" src="https://github.com/user-attachments/assets/a2803546-d460-4c8a-9c34-b734572eff76" />
+Paso 3: Encapsulamiento y enrutamiento de los datos
+1. Proceso de encapsulamiento desde Git hasta la trama Ethernet
+Cuando haces un git push, los datos (archivos, commits, mensajes, etc.) pasan por las capas del modelo de red (modelo TCP/IP / OSI). En cada capa se encapsulan agregando cabeceras.
+1. Capa de Aplicación
+Aquí trabaja Git, normalmente usando HTTP/HTTPS o SSH.
+Los datos aún son simplemente datos de aplicación.
+PDU: Datos o mensaje.
+
+2. Capa de Transporte
+Se utiliza TCP porque Git necesita transmisión confiable.
+TCP divide los datos en partes más pequeñas.
+Agrega puertos origen y destino, número de secuencia, control de errores, etc.
+PDU: Segmento TCP.
+
+3. Capa de Red
+El segmento TCP se encapsula dentro de un paquete IP.
+Se agregan:
+Dirección IP origen
+Dirección IP destino
+Aquí es donde los routers pueden encaminar los paquetes.
+PDU: Paquete IP.
+
+4. Capa de Enlace de Datos
+El paquete IP se encapsula en una trama Ethernet.
+Se agregan:
+Dirección MAC origen
+Dirección MAC destino
+FCS (control de errores).
+PDU: Trama Ethernet.
+Resumen de PDU por capa
+Capa	PDU
+Aplicación	Datos / Mensaje
+Transporte	Segmento (TCP)
+Red	Paquete (IP)
+Enlace	Trama (Ethernet)
+
+2. Router congestionado y pérdida de paquetes
+Si un router se congestiona y empieza a descartar paquetes, el git push se verá afectado porque algunos segmentos TCP no llegarán al destino.
+Mecanismo TCP que se activa
+El mecanismo es retransmisión de TCP, que ocurre cuando:
+El receptor no envía ACK.
+O llegan ACK duplicados.
+TCP activa mecanismos como:
+Retransmisión
+Control de congestión
+Fast Retransmit
+Congestion Window Reduction
+Esto reduce la velocidad de envío para evitar más congestión.
+Efecto visible:
+El git push se vuelve más lento.
+Puede parecer que se queda congelado temporalmente.
+Comando para identificar en qué salto se pierden paquetes
+El comando es:
+traceroute github.com
+o en Windows:
+tracert github.com
+Este comando muestra cada router (salto) por el que pasan los paquetes y permite detectar:
+alta latencia
+pérdida de paquetes
+dónde se interrumpe la comunicación
+
+3. Campo que evita que un paquete dé vueltas infinitas
+El campo es TTL (Time To Live) en la cabecera IP.
+Funcionamiento
+TTL es un contador numérico (por ejemplo 64 o 128).
+Cada router que procesa el paquete resta 1 al TTL.
+Cuando el TTL llega a 0, el router:
+descarta el paquete
+envía un ICMP Time Exceeded al origen.
+Objetivo
+Evitar que los paquetes circulen indefinidamente en caso de:
+bucles de enrutamiento
+errores en tablas de routing
+Git genera datos de aplicación.
+TCP los encapsula en segmentos.
+IP los encapsula en paquetes.
+Ethernet los encapsula en tramas.
+Si hay congestión:
+TCP activa retransmisión y control de congestión.
+Para detectar pérdidas:
+usar traceroute / tracert.
+Para evitar bucles:
+se usa el campo TTL en la cabecera IP.
+<img width="906" height="476" alt="image" src="https://github.com/user-attachments/assets/c6927c47-c071-4c16-a8f3-7306c938dc00" />
+Paso 4: Confirmación y fin de la comunicación
+1. Mensaje TCP que confirma la recepción de datos
+GitHub confirma la recepción correcta de los datos mediante mensajes TCP ACK (Acknowledgment).
+Cada vez que el receptor (GitHub) recibe correctamente un segmento TCP, envía un ACK indicando el siguiente número de secuencia esperado.
+Esto le dice al emisor que los datos llegaron correctamente.
+Relación con pérdida de paquetes y fiabilidad
+TCP es un protocolo confiable porque utiliza:
+ACK (Acknowledgments)
+Confirman que los datos llegaron correctamente.
+Números de secuencia
+Permiten reordenar datos si llegan fuera de orden.
+Retransmisión
+Si el emisor no recibe un ACK dentro de un tiempo, asume pérdida de paquete y retransmite el segmento.
+Gracias a estos mecanismos, TCP garantiza fiabilidad en la transmisión, incluso si algunos paquetes se pierden en la red.
+
+2. Cierre ordenado de la conexión TCP
+Cuando el git push termina, TCP realiza un cierre de conexión en cuatro pasos (four-way handshake):
+1️⃣ FIN
+El cliente envía un segmento FIN indicando que terminó de enviar datos.
+2️⃣ ACK
+El servidor responde con ACK confirmando el FIN.
+3️⃣ FIN
+El servidor también envía su propio FIN cuando termina de enviar datos.
+4️⃣ ACK
+El cliente responde con ACK final.
+Flujo simplificado:
+Cliente → FIN → Servidor
+Cliente ← ACK ← Servidor
+Cliente ← FIN ← Servidor
+Cliente → ACK → Servidor
+Esto asegura que ambos lados terminaron de transmitir datos correctamente.
+
+3. Métricas SNMP para monitorear el tráfico del push
+Si fueras administrador de red, en el agente SNMP del router de salida podrías observar métricas como:
+Tráfico de red
+Bytes transmitidos (ifOutOctets)
+Bytes recibidos (ifInOctets)
+Paquetes
+Paquetes transmitidos (ifOutUcastPkts)
+Paquetes recibidos (ifInUcastPkts)
+Errores y congestión
+Paquetes descartados (ifOutDiscards / ifInDiscards)
+Errores de transmisión (ifOutErrors / ifInErrors)
+Estas métricas permiten identificar:
+saturación del enlace
+pérdida de paquetes
+errores de interfaz
+
+4. Versión de SNMP para consultas cifradas
+La versión adecuada es SNMPv3.
+SNMPv3 agrega:
+Autenticación
+Cifrado (encryption)
+Control de acceso
+Esto protege la información de monitoreo contra interceptación o manipulación.
